@@ -18,7 +18,7 @@ export const getSessionOwner = async (id: number) => {
 
 export const getNNewestSessions = async (n: number) => {
     return knex.table("sessions")
-        .select("owner", "participant_list")
+        .select("id", "owner", "participant_list")
         .orderBy("id", "desc")
         .limit(n)
 }

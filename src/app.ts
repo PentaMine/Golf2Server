@@ -5,12 +5,9 @@ import errorMiddleware from "./middleware/jsonSyntaxMiddleware";
 import sendResponse from "./responses/sendResponse";
 import router from "./routes/router";
 import * as http from "http";
-import * as sock from "socket.io"
-import {handleSockets} from "./sockets/socket";
 
 const app = express();
-const server = http.createServer(app)
-const io = new sock.Server(server, {cors: {origin: "*"}})
+export const server = http.createServer(app)
 
 app.use("/", upload())
 app.use("/", express.json())
@@ -23,8 +20,6 @@ app.get("/", (req: Request, res: Response, next: NextFunction) => {
 
 app.use(router)
 
+server.listen(CONFIG.APP.PORT, () => console.log(`HTTP server up, listening on ${CONFIG.APP.HOST}:${CONFIG.APP.PORT}`))
 
-
-//app.listen(CONFIG.APP.PORT, () => console.log(`Server up, listening on ${CONFIG.APP.HOST}:${CONFIG.APP.PORT}`));
-server.listen(CONFIG.APP.PORT, () => console.log(`Server up, listening on ${CONFIG.APP.HOST}:${CONFIG.APP.PORT}`))
-handleSockets(io);
+import "./sockets/socket"

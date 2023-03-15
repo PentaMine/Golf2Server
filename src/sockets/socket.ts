@@ -1,72 +1,58 @@
-import {decodeNoPrefix} from "../util/token";
-import {Server} from "socket.io";
-import jwt from "jsonwebtoken";
-import CONFIG from "../config/config";
-import {DefaultEventsMap, ReservedOrUserListener} from "socket.io/dist/typed-events";
-import {NamespaceReservedEventsMap} from "socket.io/dist/namespace";
-import {getSessionOwner} from "../service/session";
+/*import { WebSocketServer } from 'ws';
 
-export const handleSockets = (io: Server) => {
-    io.sockets.on('connection', (socket) => {
+const wss = new WebSocketServer({
+    port: 2998,
+});
 
-        let uuid: number, sessionId: number, room: string
+wss.on("connection", (ws) => {
+    console.log("connected")
+    ws.on('error', console.error);
 
-        socket.on("handshake", (auth) => {
-            console.log("dsaf")
-            if (!areArgsProvided(auth) || !isTokenValid(auth)) {
-                return
-            }
-
-            const token = decodeNoPrefix(auth)
-
-            if (!token.uuid) {
-                return;
-            }
-
-            uuid = token.uuid
-        })
-
-        socket.on("addToSession", (command) => {
-            if (!areArgsProvided(command, uuid) || !isTokenValid(command)) {
-                return
-            }
-
-            const token = decodeNoPrefix(command)
-
-            if (!token.sessionId) {
-                return;
-            }
-
-            sessionId = token.sessionId
-            room = sessionId.toString()
-            socket.join(room)
-            console.log(io.sockets.adapter.rooms.get(room))
-        })
-
-        socket.on("startSession", async (mapData) => {
-
-            if (!areArgsProvided(mapData)){
-                return
-            }
-
-            console.log(await getSessionOwner(sessionId))
-
-            if (uuid != await getSessionOwner(sessionId)){
-                return
-            }
-            io.to(room).emit("sessionStarted", mapData)
-        })
-
-        socket.on("submitPosData", (posData) => {
-
-            if (!areArgsProvided(posData)){
-                return
-            }
-
-            socket.to(room).emit("receivePosData", posData)
-        })
+    ws.on('message', function message(data) {
+        console.log('received: %s', data);
     });
+
+    ws.send('something');
+    //ws.close()
+})*/
+
+import WebSocket, {RawData} from 'ws';
+import {server} from "../app";
+import CONFIG from "../config/config";
+import jwt from "jsonwebtoken";
+import {setFlagsFromString} from "v8";
+import {domainToASCII} from "url";
+import {raw} from "express";
+
+const wss = new WebSocket.Server({server: server});
+enum InEventType {
+    HANDSHAKE
 }
+
+wss.on("connection", (ws) => {
+
+    let uuid: number, sessionId: number, auth: boolean = false
+
+    const onHandshake = () => {
+        console.log("handshake")
+    }
+
+    ws.on('error', console.error);
+
+    ws.on('message', (data, isBinary) => {
+        const args = rawDataToJSON(data)
+        const type = args.type
+
+        switch (type){
+            case InEventType.HANDSHAKE:
+                onHandshake()
+        }
+
+        console.log(type)
+    });
+
+    ws.send('something');
+})
 
 const isTokenValid = (token: string) => {
     try {
@@ -86,3 +72,9 @@ const areArgsProvided = (...args: any[]) => {
     })
     return areAllValid
 }
+
+const rawDataToJSON = (data: RawData) => {
+    return JSON.parse(data.toString())
+}
+
+console.log(`WebSocket server up, waiting for connection on ${CONFIG.APP.HOST}:${CONFIG.APP.PORT}`)

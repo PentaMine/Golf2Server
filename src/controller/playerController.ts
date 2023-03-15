@@ -51,11 +51,9 @@ export const getAvailableSessions = async (req: Request, res: Response) => {
     const sessions = await getNNewestSessions(count);
 
     for (const session of sessions) {
-        console.log(await getPlayerNameById(session.owner))
         session.owner = await getPlayerNameById(session.owner)
 
         for (let i = 0; i < session.participant_list.length; i++) {
-            console.log(session.participant_list[i])
             session.participant_list[i] = await getPlayerNameById(session.participant_list[i])
         }
     }

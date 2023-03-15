@@ -14,11 +14,18 @@ export const createSession = async (req: Request, res: Response) => {
     try {
         sessionId = (await registerSession(token.uuid))
     } catch (e) {
-        badReqResponseMessage(res, "payer already in session")
+        conflictResponseMessage(res, "payer already in session")
         return
     }
 
-    okResponseMessage(res, sessionId)
+    const sessionArg = jwt.sign({"sessionId": sessionId, "uuid": token.uuid}
+        , CONFIG.AUTH.JWT_SECRET!,
+        {
+            algorithm: "HS256",
+            expiresIn: 15 // 15 seconds
+        })
+
+    okResponseMessage(res, {"socketArg": sessionArg})
 }
 
 export const joinSession = async (req: Request, res: Response) => {
@@ -35,11 +42,11 @@ export const joinSession = async (req: Request, res: Response) => {
     try {
         await addPlayerToSession(token.uuid, sessionId)
     } catch (e: any) {
-        badReqResponseMessage(res, e.message)
+        conflictResponseMessage(res, e.message)
         return
     }
 
-    const sessionArg = jwt.sign({"sessionId": sessionId}
+    const sessionArg = jwt.sign({"sessionId": sessionId, "uuid": token.uuid}
         , CONFIG.AUTH.JWT_SECRET!,
         {
             algorithm: "HS256",
@@ -54,7 +61,7 @@ export const exitSession = async (req: Request, res: Response) => {
     try {
         await leaveSession(token.uuid);
     }catch (e: any){
-        conflictResponseMessage(res, e.message)
+        badReqResponseMessage(res, e.message)
         return
     }
     okResponse(res)

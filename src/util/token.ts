@@ -10,6 +10,6 @@ export const decodeNoPrefix = (token: string) => {
 }
 
 export const getRawToken = (auth: string) => {
-    auth = auth.substring(7);
+    auth = auth.replace("Bearer ", "");
     return auth;
 }
