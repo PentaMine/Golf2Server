@@ -6,6 +6,7 @@ import badReqResponse, {badReqResponseMessage} from "../responses/badReqResponse
 import {conflictResponseMessage} from "../responses/conflictResponse";
 import jwt from "jsonwebtoken";
 import CONFIG from "../config/config";
+import {domainToASCII} from "url";
 
 export const createSession = async (req: Request, res: Response) => {
     let sessionId;
@@ -18,7 +19,7 @@ export const createSession = async (req: Request, res: Response) => {
         return
     }
 
-    const sessionArg = jwt.sign({"sessionId": sessionId, "uuid": token.uuid}
+    const sessionArg = jwt.sign({"sessionId": sessionId, "uuid": token.uuid, "isOwner": true}
         , CONFIG.AUTH.JWT_SECRET!,
         {
             algorithm: "HS256",
@@ -46,7 +47,7 @@ export const joinSession = async (req: Request, res: Response) => {
         return
     }
 
-    const sessionArg = jwt.sign({"sessionId": sessionId, "uuid": token.uuid}
+    const sessionArg = jwt.sign({"sessionId": sessionId, "uuid": token.uuid, "isOwner": false}
         , CONFIG.AUTH.JWT_SECRET!,
         {
             algorithm: "HS256",
