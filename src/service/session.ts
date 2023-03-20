@@ -6,7 +6,7 @@ export const registerSession = async (owner: number) => {
     }
 
     return (await knex.table("sessions")
-        .insert({"participant_list": "[]", "owner": owner}, ["id"]))[0];
+        .insert({"participant_list": "[]", "owner": owner}, ["id"]))[0].id;
 }
 
 export const getSessionById = async (id: number) => {

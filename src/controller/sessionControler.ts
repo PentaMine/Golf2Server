@@ -18,7 +18,6 @@ export const createSession = async (req: Request, res: Response) => {
         conflictResponseMessage(res, "payer already in session")
         return
     }
-
     const sessionArg = jwt.sign({"sessionId": sessionId, "uuid": token.uuid, "isOwner": true}
         , CONFIG.AUTH.JWT_SECRET!,
         {
