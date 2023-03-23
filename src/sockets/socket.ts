@@ -8,6 +8,9 @@ import {raw} from "express";
 import {decodeNoPrefix} from "../util/token";
 import {getPlayerNameById} from "../service/player";
 import {CANCELLED} from "dns";
+import {Console} from "inspector";
+import * as timers from "timers";
+import {delay} from "../util/timer";
 
 const wss = new WebSocket.Server({server: server});
 
@@ -15,7 +18,8 @@ enum InEventType {
     HANDSHAKE,
     DISCONNECT,
     SET_READY,
-    SET_UNREADY
+    SET_UNREADY,
+    POS_SYNC
 }
 
 enum OutEventType {
@@ -23,6 +27,8 @@ enum OutEventType {
     HANDSHAKE_NAK,
     SYNCHRONISE,
     MAP_SYNC,
+    SESSION_COUNTDOWN,
+    POS_SYNC
 }
 
 class User {
@@ -31,6 +37,7 @@ class User {
     public isOwner: boolean
     public uuid: number
     public isReady: boolean
+    public isSessionStarted: boolean
 
     constructor(socket: WebSocket, name: string, isOwner: boolean, id: number) {
         this.socket = socket;
@@ -38,6 +45,7 @@ class User {
         this.isOwner = isOwner;
         this.uuid = id
         this.isReady = false;
+        this.isSessionStarted = false;
     }
 }
 
@@ -71,10 +79,9 @@ wss.on("connection", (ws) => {
         // invoke sync event
         if (sessions.has(sessionId)) {
             // add user to list of users in session
+
             let users = sessions.get(sessionId)!
-
             users.push(user)
-
             sessions.set(sessionId, users)
 
             sendSyncMessage()
@@ -113,7 +120,7 @@ wss.on("connection", (ws) => {
 
     const onSetReady = (content: any) => {
 
-        if (!sessions.get(sessionId)) {
+        if (!sessions.get(sessionId) || user.isSessionStarted) {
             return
         }
 
@@ -126,13 +133,13 @@ wss.on("connection", (ws) => {
             areAllReady = areAllReady && user.isReady
         })
 
-
-        //ws.send(composeSyncMessage(sessions.get(sessionId)!))
         sendSyncMessage()
 
-        if (areAllReady) {
-            // TODO: start game logic
+        // TODO: add minimum participant requirement in prod
+        if (areAllReady/* && sessions.get(sessionId)!.length > 1*/) {
             console.log("all ready")
+            // run asynchronously
+            sessionStartCountdown()
         }
 
         if (!user.isOwner || isMapSent) {
@@ -148,7 +155,7 @@ wss.on("connection", (ws) => {
     const onSetUnready = (content: any) => {
         // set user as unready
 
-        if (!sessions.get(sessionId)) {
+        if (!sessions.get(sessionId) || user.isSessionStarted) {
             return
         }
 
@@ -158,8 +165,16 @@ wss.on("connection", (ws) => {
             }
         })
 
-        //ws.send(composeSyncMessage(sessions.get(sessionId)!))
         sendSyncMessage()
+    }
+
+    const onPosSync = (content: any) => {
+        sessions.get(sessionId)!.forEach((user) => {
+            if (user.uuid == uuid){
+                return
+            }
+            user.socket.send(composeMessage(OutEventType.POS_SYNC, content))
+        })
     }
 
     const sendSyncMessage = () => {
@@ -172,6 +187,23 @@ wss.on("connection", (ws) => {
         session.forEach((user) => {
             user.socket.send(composeSyncMessage(session))
         })
+    }
+
+    const sessionStartCountdown = async () => {
+        let session = sessions.get(sessionId)!
+
+        session.forEach((user) => {
+            user.isSessionStarted = true;
+        })
+
+        await delay(1000)
+
+        for (let i = 5; i >= 0; i--) {
+            session.forEach((user) => {
+                user.socket.send(composeMessage(OutEventType.SESSION_COUNTDOWN, {"time": i}))
+            })
+            await delay(1000)
+        }
     }
 
     ws.on('error', console.error);
@@ -196,6 +228,10 @@ wss.on("connection", (ws) => {
                 break;
             case InEventType.SET_UNREADY:
                 onSetUnready(args.content)
+                break;
+            case InEventType.POS_SYNC:
+                onPosSync(args.content)
+
         }
 
     });
