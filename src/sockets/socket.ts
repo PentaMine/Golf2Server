@@ -1,16 +1,11 @@
-import WebSocket, {CloseEvent, RawData} from 'ws';
+import WebSocket, {RawData} from 'ws';
 import {server} from "../app";
 import CONFIG from "../config/config";
 import jwt from "jsonwebtoken";
-import {setFlagsFromString} from "v8";
-import {domainToASCII} from "url";
-import {raw} from "express";
 import {decodeNoPrefix} from "../util/token";
 import {getPlayerNameById} from "../service/player";
-import {CANCELLED} from "dns";
-import {Console} from "inspector";
-import * as timers from "timers";
 import {delay} from "../util/timer";
+import {leaveSession} from "../service/session";
 
 const wss = new WebSocket.Server({server: server});
 
@@ -19,7 +14,8 @@ enum InEventType {
     DISCONNECT,
     SET_READY,
     SET_UNREADY,
-    POS_SYNC
+    POS_SYNC,
+
 }
 
 enum OutEventType {
@@ -28,7 +24,8 @@ enum OutEventType {
     SYNCHRONISE,
     MAP_SYNC,
     SESSION_COUNTDOWN,
-    POS_SYNC
+    POS_SYNC,
+    END_OF_SESSION
 }
 
 class User {
@@ -37,7 +34,6 @@ class User {
     public isOwner: boolean
     public uuid: number
     public isReady: boolean
-    public isSessionStarted: boolean
 
     constructor(socket: WebSocket, name: string, isOwner: boolean, id: number) {
         this.socket = socket;
@@ -45,14 +41,57 @@ class User {
         this.isOwner = isOwner;
         this.uuid = id
         this.isReady = false;
-        this.isSessionStarted = false;
     }
 }
 
-let sessions: Map<number, Array<User>> = new Map()
+class Session {
+    public users: Array<User>;
+    public isStarted: boolean;
+    public isMapSent: boolean;
+    public map: any
+
+    constructor(users: Array<User>) {
+        this.users = users;
+        this.isStarted = false;
+        this.isMapSent = false;
+    }
+
+    sendSyncMessage() {
+
+        if (!this.users) {
+            return
+        }
+
+        this.users.forEach((user) => {
+            user.socket.send(composeSyncMessage(this.users))
+        })
+    }
+
+    async startCountdown() {
+        this.isStarted = true
+
+        await delay(1000)
+
+        for (let i = 5; i >= 0; i--) {
+            this.users.forEach((user) => {
+                user.socket.send(composeMessage(OutEventType.SESSION_COUNTDOWN, {"time": i}))
+            })
+            await delay(1000)
+        }
+    }
+
+    close() {
+        this.users.forEach((user) => {
+            user.socket.send(composeMessage(OutEventType.END_OF_SESSION))
+            delay(5000).then(() => user.socket.close())
+        })
+    }
+}
+
+let sessions: Map<number, Session> = new Map()
 wss.on("connection", (ws) => {
 
-    let uuid: number, sessionId: number, isOwner: boolean, user: User, isMapSent: boolean
+    let uuid: number, sessionId: number, isOwner: boolean, user: User, isMapSent: boolean, session: Session
 
     const onHandshake = async (content: any) => {
         // deny if token is invalid
@@ -69,7 +108,7 @@ wss.on("connection", (ws) => {
         isOwner = token.isOwner
 
         // deny if token does not have required args
-        if (!areArgsProvided(uuid, sessionId, isOwner)) {
+        if (!areArgsProvided(uuid, sessionId, isOwner) || (!sessions.has(sessionId) && !isOwner)) {
             ws.send(composeMessage(OutEventType.HANDSHAKE_NAK))
             return;
         }
@@ -79,75 +118,85 @@ wss.on("connection", (ws) => {
         // invoke sync event
         if (sessions.has(sessionId)) {
             // add user to list of users in session
-
-            let users = sessions.get(sessionId)!
+            session = sessions.get(sessionId)!
+            let users = session.users
             users.push(user)
-            sessions.set(sessionId, users)
+            if (session.isStarted) {
+                ws.send(composeMessage(OutEventType.HANDSHAKE_NAK))
+                return
+            }
 
-            sendSyncMessage()
+            session.sendSyncMessage()
         } else {
             // add session
             let users: Array<User> = [user]
-            sessions.set(sessionId, users)
+            session = new Session(users)
+            sessions.set(sessionId, session)
             ws.send(composeSyncMessage(users))
         }
 
         ws.send(composeMessage(OutEventType.HANDSHAKE_ACK))
+
+
     }
 
     const onDisconnect = (content: any) => {
-        // remove user from session and close the connection
-
         if (!sessions.has(sessionId)) {
             ws.close()
             return
         }
 
-        let users: Array<User> = sessions.get(sessionId)!
-
-        let index = users.indexOf(user);
-        if (index != -1) {
-            users.splice(index, 1);
-        }
-
-        if (users.length == 0) {
+        // if user who left is the owner delete & close the session else just remove the player
+        if (user.isOwner) {
+            session.close()
             sessions.delete(sessionId);
+        } else {
+
+            let users: Array<User> = session.users
+
+            let index = users.indexOf(user);
+            if (index != -1) {
+                users.splice(index, 1);
+            }
         }
 
         ws.close()
-        sendSyncMessage()
+        session.sendSyncMessage()
+        // update db
+        leaveSession(uuid);
     }
 
     const onSetReady = (content: any) => {
 
-        if (!sessions.get(sessionId) || user.isSessionStarted) {
+        if (session.isStarted) {
             return
         }
 
         // set user as ready
         let areAllReady = true;
-        sessions.get(sessionId)!.forEach((user) => {
+
+        session.users.forEach((user) => {
             if (user.uuid == uuid) {
                 user.isReady = true;
             }
             areAllReady = areAllReady && user.isReady
         })
 
-        sendSyncMessage()
-
-        // TODO: add minimum participant requirement in prod
-        if (areAllReady/* && sessions.get(sessionId)!.length > 1*/) {
+        session.sendSyncMessage()
+        // TODO: REMOVE IN PROD
+        if (areAllReady /*&& session.users.length > 1*/) {
             console.log("all ready")
             // run asynchronously
-            sessionStartCountdown()
+            session.startCountdown()
         }
 
         if (!user.isOwner || isMapSent) {
             return
         }
 
-        isMapSent = true;
-        sessions.get(sessionId)!.forEach((user) => {
+        session.isMapSent = true;
+        session.map = content;
+        session.users.forEach((user) => {
             user.socket.send(composeMessage(OutEventType.MAP_SYNC, content))
         })
     }
@@ -155,55 +204,46 @@ wss.on("connection", (ws) => {
     const onSetUnready = (content: any) => {
         // set user as unready
 
-        if (!sessions.get(sessionId) || user.isSessionStarted) {
+        if (!sessions.get(sessionId) || session.isStarted) {
             return
         }
 
-        sessions.get(sessionId)!.forEach((user) => {
+        session.users.forEach((user) => {
             if (user.uuid == uuid) {
                 user.isReady = false;
             }
         })
 
-        sendSyncMessage()
+        session.sendSyncMessage()
     }
 
     const onPosSync = (content: any) => {
-        sessions.get(sessionId)!.forEach((user) => {
-            if (user.uuid == uuid){
-                return
-            }
-            user.socket.send(composeMessage(OutEventType.POS_SYNC, content))
-        })
-    }
 
-    const sendSyncMessage = () => {
-        let session: Array<User> = sessions.get(sessionId)!
-
-        if (!session) {
+        if (!verifyPosSyncContent(content)) {
             return
         }
-
-        session.forEach((user) => {
-            user.socket.send(composeSyncMessage(session))
+        console.log(Date.now(), {
+            "px": content.px,
+            "py": content.py,
+            "pz": content.pz,
+            "vx": content.vx,
+            "vy": content.vy,
+            "vz": content.vz
         })
-    }
-
-    const sessionStartCountdown = async () => {
-        let session = sessions.get(sessionId)!
-
-        session.forEach((user) => {
-            user.isSessionStarted = true;
+        session.users.forEach((_user) => {
+            if (_user.uuid == uuid) {
+                return
+            }
+            _user.socket.send(composeMessage(OutEventType.POS_SYNC, {
+                "user": user.username,
+                "px": content.px,
+                "py": content.py,
+                "pz": content.pz,
+                "vx": content.vx,
+                "vt": content.vy,
+                "vz": content.vz
+            }))
         })
-
-        await delay(1000)
-
-        for (let i = 5; i >= 0; i--) {
-            session.forEach((user) => {
-                user.socket.send(composeMessage(OutEventType.SESSION_COUNTDOWN, {"time": i}))
-            })
-            await delay(1000)
-        }
     }
 
     ws.on('error', console.error);
@@ -238,11 +278,27 @@ wss.on("connection", (ws) => {
 
     ws.on("close", (e) => {
         onDisconnect({})
+
         console.log(e)
         console.log("closed")
     })
 })
 
+const verifyPosSyncContent = (content: any) => {
+    return areArgsProvided(
+            content.px,
+            content.py,
+            content.pz,
+            content.vx,
+            content.vy,
+            content.vz)
+        && !isNaN(content.px)
+        && !isNaN(content.py)
+        && !isNaN(content.pz)
+        && !isNaN(content.vx)
+        && !isNaN(content.vy)
+        && !isNaN(content.vz)
+}
 
 const composeMessage = (type: OutEventType, content: any = {}) => {
     return JSON.stringify({"type": type, "content": content})
