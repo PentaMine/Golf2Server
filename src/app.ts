@@ -1,6 +1,5 @@
 import express, {NextFunction, Request, Response} from "express";
 import CONFIG from "./config/config";
-import upload from "express-fileupload";
 import errorMiddleware from "./middleware/jsonSyntaxMiddleware";
 import sendResponse from "./responses/sendResponse";
 import router from "./routes/router";
@@ -16,7 +15,7 @@ app.use("/", express.json())
 app.use("/", errorMiddleware)
 
 app.get("/", (req: Request, res: Response, next: NextFunction) => {
-    sendResponse(res, CONFIG.CODES.OK, "kaj prčkaš, majku ti vidim, ve mam tvoj ip: " + req.socket.remoteAddress)
+    sendResponse(res, CONFIG.CODES.OK, req.socket.remoteAddress)
 })
 
 app.use(router)

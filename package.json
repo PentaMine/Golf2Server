@@ -4,9 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "prod": "node ./dist/app.js",
+    "prod": "node ./dist/src/app.js",
     "dev": "nodemon src/app.ts",
-    "build": "tsc -p ."
+    "build": "tsc -p ./src"
   },
   "author": "PentaMine",
   "license": "ISC",
