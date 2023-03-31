@@ -10,8 +10,8 @@ export const createPlayer = async (name: string, addressOfOrigin: string) => {
         .insert({"name": name, "address_of_origin": addressOfOrigin}, ["id"]))[0].id
 }
 
-export const updateLastLogin = async (id: number) => {
-    return knex.table("players").where({"id": id}).update({"last_login": knex.fn.now()});
+export const updateLastLogin = async (id: number, ip: string) => {
+    return knex.table("players").where({"id": id}).update({"last_login": knex.fn.now(), "address_of_origin": ip});
 }
 
 export const getPlayerNameById = async (id: number) => {

@@ -6,6 +6,7 @@ import {decodeNoPrefix} from "../util/token";
 import {getPlayerNameById} from "../service/player";
 import {delay} from "../util/timer";
 import {leaveSession} from "../service/session";
+import {Decipher} from "crypto";
 
 const wss = new WebSocket.Server({server: server});
 
@@ -15,7 +16,8 @@ enum InEventType {
     SET_READY,
     SET_UNREADY,
     POS_SYNC,
-
+    FINISH,
+    REFRESH
 }
 
 enum OutEventType {
@@ -25,7 +27,9 @@ enum OutEventType {
     MAP_SYNC,
     SESSION_COUNTDOWN,
     POS_SYNC,
-    END_OF_SESSION
+    SESSION_CLOSED,
+    GAME_FINISHED,
+
 }
 
 class User {
@@ -34,6 +38,8 @@ class User {
     public isOwner: boolean
     public uuid: number
     public isReady: boolean
+    public isFinished: boolean;
+    public timeToFinish: number | undefined;
 
     constructor(socket: WebSocket, name: string, isOwner: boolean, id: number) {
         this.socket = socket;
@@ -41,6 +47,7 @@ class User {
         this.isOwner = isOwner;
         this.uuid = id
         this.isReady = false;
+        this.isFinished = false;
     }
 }
 
@@ -56,14 +63,21 @@ class Session {
         this.isMapSent = false;
     }
 
-    sendSyncMessage() {
+    sendSyncMessage(socket: WebSocket | undefined = undefined) {
 
         if (!this.users) {
             return
         }
 
+        let syncMessage = composeSyncMessage(this.users)
+
+        if (socket) {
+            socket.send(syncMessage)
+            return;
+        }
+
         this.users.forEach((user) => {
-            user.socket.send(composeSyncMessage(this.users))
+            user.socket.send(syncMessage)
         })
     }
 
@@ -82,8 +96,26 @@ class Session {
 
     close() {
         this.users.forEach((user) => {
-            user.socket.send(composeMessage(OutEventType.END_OF_SESSION))
+            user.socket.send(composeMessage(OutEventType.SESSION_CLOSED))
             delay(5000).then(() => user.socket.close())
+        })
+    }
+
+    finish() {
+        // reset session
+        this.isStarted = false;
+        this.isMapSent = false;
+        this.map = undefined;
+
+        let finishMessage = composeFinishMessage(this.users)
+
+        this.users.forEach((user) => {
+            user.socket.send(finishMessage)
+
+            // reset the user
+            user.timeToFinish = undefined;
+            user.isFinished = false;
+            user.isReady = false;
         })
     }
 }
@@ -97,7 +129,8 @@ wss.on("connection", (ws) => {
         // deny if token is invalid
         if (!isTokenValid(content.socketArg)) {
 
-            ws.send(composeMessage(OutEventType.HANDSHAKE_NAK))
+            ws.send(composeMessage(OutEventType.HANDSHAKE_NAK, {"reason": "invalid session token"}))
+            ws.close()
             return;
         }
 
@@ -109,7 +142,8 @@ wss.on("connection", (ws) => {
 
         // deny if token does not have required args
         if (!areArgsProvided(uuid, sessionId, isOwner) || (!sessions.has(sessionId) && !isOwner)) {
-            ws.send(composeMessage(OutEventType.HANDSHAKE_NAK))
+            ws.send(composeMessage(OutEventType.HANDSHAKE_NAK, {"reason": "error in handshake packet"}))
+            ws.close()
             return;
         }
 
@@ -119,10 +153,14 @@ wss.on("connection", (ws) => {
         if (sessions.has(sessionId)) {
             // add user to list of users in session
             session = sessions.get(sessionId)!
-            let users = session.users
-            users.push(user)
+            if (session.users.length >= 4) {
+                ws.send(composeMessage(OutEventType.HANDSHAKE_NAK, {"reason": "session full"}))
+                ws.close()
+            }
+            session.users.push(user)
             if (session.isStarted) {
-                ws.send(composeMessage(OutEventType.HANDSHAKE_NAK))
+                ws.send(composeMessage(OutEventType.HANDSHAKE_NAK, {"reason": "session already started"}))
+                ws.close()
                 return
             }
 
@@ -136,8 +174,6 @@ wss.on("connection", (ws) => {
         }
 
         ws.send(composeMessage(OutEventType.HANDSHAKE_ACK))
-
-
     }
 
     const onDisconnect = (content: any) => {
@@ -150,20 +186,22 @@ wss.on("connection", (ws) => {
         if (user.isOwner) {
             session.close()
             sessions.delete(sessionId);
-        } else {
-
-            let users: Array<User> = session.users
-
-            let index = users.indexOf(user);
-            if (index != -1) {
-                users.splice(index, 1);
-            }
         }
+
+        let users: Array<User> = session.users
+
+        let index = users.indexOf(user);
+        if (index != -1) {
+            users.splice(index, 1);
+        }
+
 
         ws.close()
         session.sendSyncMessage()
         // update db
-        leaveSession(uuid);
+        leaveSession(uuid).catch(() => {
+            return
+        });
     }
 
     const onSetReady = (content: any) => {
@@ -185,7 +223,6 @@ wss.on("connection", (ws) => {
         session.sendSyncMessage()
         // TODO: REMOVE IN PROD
         if (areAllReady /*&& session.users.length > 1*/) {
-            console.log("all ready")
             // run asynchronously
             session.startCountdown()
         }
@@ -222,14 +259,7 @@ wss.on("connection", (ws) => {
         if (!verifyPosSyncContent(content)) {
             return
         }
-        console.log(Date.now(), {
-            "px": content.px,
-            "py": content.py,
-            "pz": content.pz,
-            "vx": content.vx,
-            "vy": content.vy,
-            "vz": content.vz
-        })
+
         session.users.forEach((_user) => {
             if (_user.uuid == uuid) {
                 return
@@ -244,6 +274,26 @@ wss.on("connection", (ws) => {
                 "vz": content.vz
             }))
         })
+    }
+
+    const onFinish = (content: any) => {
+        if (!content.time || isNaN(content.time)) {
+            return
+        }
+        let areAllFinished = true;
+        session.users.forEach((user) => {
+
+            if (user.uuid == uuid) {
+                user.isFinished = true;
+                user.timeToFinish = content.time
+            }
+
+            areAllFinished = areAllFinished && user.isFinished
+        })
+
+        if (areAllFinished) {
+            session.finish()
+        }
     }
 
     ws.on('error', console.error);
@@ -271,16 +321,18 @@ wss.on("connection", (ws) => {
                 break;
             case InEventType.POS_SYNC:
                 onPosSync(args.content)
-
+                break;
+            case InEventType.FINISH:
+                onFinish(args.content)
+                break;
+            case InEventType.REFRESH:
+                session.sendSyncMessage(ws)
         }
 
     });
 
     ws.on("close", (e) => {
         onDisconnect({})
-
-        console.log(e)
-        console.log("closed")
     })
 })
 
@@ -321,10 +373,25 @@ const composeSyncMessage = (users: Array<User>) => {
         owner = user.username
     })
 
-    return JSON.stringify({
-        "type": OutEventType.SYNCHRONISE,
-        "content": {"owner": owner, "participants": participants, "ready": ready}
+    return composeMessage(
+        OutEventType.SYNCHRONISE,
+        {"owner": owner, "participants": participants, "ready": ready}
+    )
+}
+
+const composeFinishMessage = (users: Array<User>) => {
+    let participants: Array<string> = []
+    let scores: Array<number> = [];
+
+    users.forEach((user) => {
+        participants.push(user.username)
+        scores.push(user.timeToFinish!)
     })
+
+    return composeMessage(
+        OutEventType.GAME_FINISHED,
+        {"participants": participants, "scores": scores}
+    )
 }
 
 const isTokenValid = (token: string) => {

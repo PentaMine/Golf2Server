@@ -6,20 +6,27 @@ import sendResponse from "./responses/sendResponse";
 import router from "./routes/router";
 import * as http from "http";
 
+
+const port: number = Number(CONFIG.APP.PORT);
+const host: string = CONFIG.APP.HOST!;
 const app = express();
 export const server = http.createServer(app)
 
-app.use("/", upload())
 app.use("/", express.json())
 app.use("/", errorMiddleware)
 
 app.get("/", (req: Request, res: Response, next: NextFunction) => {
-    console.log(req.socket.remoteAddress)
-    sendResponse(res, CONFIG.CODES.OK, CONFIG.MESSAGES.OK)
+    sendResponse(res, CONFIG.CODES.OK, "kaj prčkaš, majku ti vidim, ve mam tvoj ip: " + req.socket.remoteAddress)
 })
 
 app.use(router)
 
-server.listen(CONFIG.APP.PORT, () => console.log(`HTTP server up, listening on ${CONFIG.APP.HOST}:${CONFIG.APP.PORT}`))
+server.listen(
+    port,
+    "::",
+    () => {
+        console.log(`HTTP server up, listening on ${host}:${port}`)
+    }
+)
 
 import "./sockets/socket"

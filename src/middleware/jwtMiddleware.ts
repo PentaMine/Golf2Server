@@ -16,7 +16,7 @@ const jwtMiddleware = (req: Request, res: Response, next: NextFunction) => {
             return;
         }
 
-        updateLastLogin(decoded.uuid)
+        updateLastLogin(decoded.uuid, req.socket.remoteAddress!)
     }
     catch (e) {
         unauthResponse(res);
