@@ -221,7 +221,7 @@ wss.on("connection", (ws) => {
         })
 
         session.sendSyncMessage()
-        
+
         if (areAllReady && session.users.length > 1) {
             // run asynchronously
             session.startCountdown()

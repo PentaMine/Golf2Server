@@ -14,9 +14,7 @@ export const server = http.createServer(app)
 app.use("/", express.json())
 app.use("/", errorMiddleware)
 
-app.get("/", (req: Request, res: Response, next: NextFunction) => {
-    res.status(200).send(`kaj prčkaš majku ti vidim, ve mam tvoju ip adresu, mulec jen <h1>${req.socket.remoteAddress}<h1/>`)
-})
+
 
 app.use(router)
 
