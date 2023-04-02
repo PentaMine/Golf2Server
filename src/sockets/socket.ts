@@ -221,8 +221,8 @@ wss.on("connection", (ws) => {
         })
 
         session.sendSyncMessage()
-        // TODO: REMOVE IN PROD
-        if (areAllReady /*&& session.users.length > 1*/) {
+        
+        if (areAllReady && session.users.length > 1) {
             // run asynchronously
             session.startCountdown()
         }
