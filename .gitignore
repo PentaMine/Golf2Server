@@ -4,3 +4,6 @@
 /.idea
 /node_modules/
 **/*.js
+compose.yml
+knexfile.ts
+.env
