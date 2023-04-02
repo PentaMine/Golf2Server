@@ -13,9 +13,6 @@ export const server = http.createServer(app)
 
 app.use("/", express.json())
 app.use("/", errorMiddleware)
-
-
-
 app.use(router)
 
 server.listen(
