@@ -6,6 +6,7 @@ const CONFIG = {
         BASE_URL: process.env.API_BASE_URL,
         PORT: process.env.NODE_ENV === 'test' ? 8889 : process.env.PORT || 3001,
         ENV: process.env.NODE_ENV,
+        EASTER_EGG_MESSAGE: process.env.EASTER_EGG_MESSAGE
     },
     AUTH : {
         JWT_SECRET: process.env.JWT_SECRET

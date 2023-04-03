@@ -174,6 +174,12 @@ wss.on("connection", (ws) => {
         }
 
         ws.send(composeMessage(OutEventType.HANDSHAKE_ACK))
+
+        if (session.isMapSent) {
+            session.users.forEach((user) => {
+                user.socket.send(composeMessage(OutEventType.MAP_SYNC, session.map))
+            })
+        }
     }
 
     const onDisconnect = (content: any) => {
@@ -206,7 +212,7 @@ wss.on("connection", (ws) => {
 
     const onSetReady = (content: any) => {
 
-        if (session.isStarted) {
+        if (session.isStarted || session.users.length == 1) {
             return
         }
 
@@ -222,7 +228,7 @@ wss.on("connection", (ws) => {
 
         session.sendSyncMessage()
 
-        if (areAllReady && session.users.length > 1) {
+        if (areAllReady) {
             // run asynchronously
             session.startCountdown()
         }
@@ -284,6 +290,7 @@ wss.on("connection", (ws) => {
         session.users.forEach((user) => {
 
             if (user.uuid == uuid) {
+                console.log(user)
                 user.isFinished = true;
                 user.timeToFinish = content.time
             }
