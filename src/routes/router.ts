@@ -12,12 +12,6 @@ router.post("/clientauth", authoriseClient)
 router.post("/browsesessions", getAvailableSessions)
 router.get("/browsesessions", getAvailableSessions)
 
-// dik kliker
-router.post("/dksubmit", submitScore)
-router.get("/dkleaderboard", getLeaderBoard)
-router.get("/dkauth", registerSubmiter)
-// dik kliker
-
 router.use("/", jwtMiddleware)
 
 router.post("/newsession", createSession)
