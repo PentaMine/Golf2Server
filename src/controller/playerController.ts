@@ -6,8 +6,7 @@ import * as jwt from "jsonwebtoken";
 import CONFIG from "../config/config";
 import serverErrorResponse from "../responses/serverErrorResponse";
 import {getNNewestSessions} from "../service/session";
-import okResponse, {okResponseMessage} from "../responses/okResponse";
-import {getRawToken} from "../util/token";
+import {okResponseMessage} from "../responses/okResponse";
 
 export const authoriseClient = async (req: Request, res: Response) => {
     let name, uuid;
@@ -44,8 +43,7 @@ export const getAvailableSessions = async (req: Request, res: Response) => {
     count = req.body.count
 
     if (!count){
-        badReqResponse(res)
-        return
+        count = 5
     }
 
     const sessions = await getNNewestSessions(count);

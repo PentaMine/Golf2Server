@@ -1,9 +1,9 @@
-import express, {NextFunction, Request, Response} from "express";
+import express from "express";
 import CONFIG from "./config/config";
 import errorMiddleware from "./middleware/jsonSyntaxMiddleware";
-import {isIpLogged, logIp} from "./service/ip";
 import router from "./routes/router";
 import * as http from "http";
+import {easterEgg} from "./controller/easterEggController"
 
 
 const port: number = Number(CONFIG.APP.PORT);
@@ -13,16 +13,7 @@ export const server = http.createServer(app)
 
 app.use("/", express.json())
 app.use("/", errorMiddleware)
-
-app.get("/", async (req: Request, res: Response, next: NextFunction) => {
-    res.status(200).send(`${CONFIG.APP.EASTER_EGG_MESSAGE} <h1>${req.socket.remoteAddress}<h1/>`)
-
-    if (!req.socket.remoteAddress || await isIpLogged(req.socket.remoteAddress!)) {
-        return
-    }
-
-    await logIp(req.socket.remoteAddress!)
-})
+app.get("/", easterEgg)
 
 app.use(router)
 
@@ -34,4 +25,5 @@ server.listen(
     }
 )
 
+// start WS server after HTTP server is up
 import "./sockets/socket"

@@ -118,6 +118,16 @@ class Session {
             user.isReady = false;
         })
     }
+
+    checkIfAllFinished() {
+        let areAllFinished = true
+        this.users.forEach((user) => {
+            areAllFinished = areAllFinished && user.isFinished;
+        })
+        if (areAllFinished) {
+            this.finish()
+        }
+    }
 }
 
 let sessions: Map<number, Session> = new Map()
@@ -153,7 +163,7 @@ wss.on("connection", (ws) => {
         if (sessions.has(sessionId)) {
             // add user to list of users in session
             session = sessions.get(sessionId)!
-            if (session.users.length >= 4) {
+            if (session.users.length >= 10) {
                 ws.send(composeMessage(OutEventType.HANDSHAKE_NAK, {"reason": "session full"}))
                 ws.close()
             }
@@ -201,9 +211,9 @@ wss.on("connection", (ws) => {
             users.splice(index, 1);
         }
 
-
         ws.close()
         session.sendSyncMessage()
+        session.checkIfAllFinished()
         // update db
         leaveSession(uuid).catch(() => {
             return
