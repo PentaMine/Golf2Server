@@ -5,7 +5,6 @@ import router from "./routes/router";
 import * as http from "http";
 import {easterEgg} from "./controller/easterEggController"
 
-
 const port: number = Number(CONFIG.APP.PORT);
 const host: string = CONFIG.APP.HOST!;
 const app = express();

@@ -1,7 +1,7 @@
 import {Router} from "express";
-import {authoriseClient, getAvailableSessions} from "../controller/playerController";
+import {authoriseClient, verifyAuth} from "../controller/playerController";
 import jwtMiddleware from "../middleware/jwtMiddleware";
-import {createSession, exitSession, joinSession} from "../controller/sessionControler";
+import {createSession, exitSession, getAvailableSessions, joinSession} from "../controller/sessionControler";
 import {getNNewestSessions} from "../service/session";
 import okResponse from "../responses/okResponse";
 
@@ -16,5 +16,6 @@ router.use("/", jwtMiddleware)
 router.post("/newsession", createSession)
 router.post("/joinsession", joinSession)
 router.post("/leavesession", exitSession)
-router.get("/verifyauth", (req, res) => {okResponse(res);})
+router.post("/verifyauth", verifyAuth)
+router.get("/verifyauth", verifyAuth) // backwards compatibility (deprecated)
 export default router
