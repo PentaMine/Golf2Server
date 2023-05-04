@@ -1,7 +1,7 @@
 import User from "./user";
 import WebSocket from "ws";
 import {delay} from "../util/timer";
-import {composeSyncMessage, composeMessage, composeFinishMessage} from "../util/socketMessage";
+import {composeFinishMessage, composeMessage, composeSyncMessage} from "../util/socketMessage";
 import {OutEventType} from "./events/outEvents";
 
 export default class Session {
@@ -113,8 +113,14 @@ export default class Session {
             this.users.splice(index, 1);
         }
     }
-
-    getUserByUUID (uuid:  number) {
-
+    kickUser(name: string) {
+        this.users.forEach((user) => {
+            if (user.username == name) {
+                this.removeUser(user)
+                user.socket.send(composeMessage(OutEventType.KICK))
+                user.socket.close()
+                this.sendSyncMessage()
+            }
+        })
     }
 }

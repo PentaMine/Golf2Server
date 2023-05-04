@@ -169,6 +169,14 @@ wss.on("connection", (ws) => {
         session.checkIfAllFinished()
     }
 
+    const onKick = (content: any) => {
+
+        if (!user.isOwner || !areArgsProvided(content.name)) {
+            return
+        }
+        session.kickUser(content.name)
+    }
+
     ws.on('error', console.error);
 
     ws.on('message', (data, isBinary) => {
@@ -200,6 +208,9 @@ wss.on("connection", (ws) => {
                 break;
             case InEventType.REFRESH:
                 session.sendSyncMessage(ws)
+                break;
+            case InEventType.KICK:
+                onKick(args.content)
         }
 
     });

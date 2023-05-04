@@ -6,5 +6,6 @@ export const enum OutEventType {
     SESSION_COUNTDOWN,
     POS_SYNC,
     SESSION_CLOSED,
-    GAME_FINISHED
+    GAME_FINISHED,
+    KICK
 }
